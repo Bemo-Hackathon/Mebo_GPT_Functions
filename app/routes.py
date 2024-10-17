@@ -1,10 +1,11 @@
 from flask import Blueprint, request, jsonify
 from .utils import identify_persona, greetings_persona, notification_offer, notify_customer_payment_status_with_gpt, call_openai_api
 import requests
+import os
 
 api = Blueprint('api', __name__)
 
-API_KEY = 'APIKEY'
+API_KEY = os.getenv('API_KEY')
 BASE_URL = "https://api.openai.com/v1"
 DEFAULT_MODEL = "gpt-3.5-turbo-0125"
 
