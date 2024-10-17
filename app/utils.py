@@ -1,7 +1,8 @@
 import pandas as pd
 import requests
+import os
 
-API_KEY = 'APIKEY'
+API_KEY = os.getenv('API_KEY')
 BASE_URL = "https://api.openai.com/v1"
 DEFAULT_MODEL = "gpt-3.5-turbo-0125"
 
