@@ -1,14 +1,16 @@
-# %%
-import os
-import requests
-from dotenv import load_dotenv
+from flask import Blueprint, request, jsonify, Flask, session
+from flask_cors import CORS
 import pandas as pd
+import requests
+import os
 
-load_dotenv()
-API_KEY = 'API_KEY'
+API_KEY = os.getenv('API_KEY')
 BASE_URL = "https://api.openai.com/v1"
 DEFAULT_MODEL = "gpt-3.5-turbo-0125"
 
+SESSION_LIFETIME = 1800
+
+api = Blueprint('api', __name__)
 
 def load_faq(file_path):
     try:
@@ -40,7 +42,6 @@ def load_customer_data(file_path):
     except Exception as e:
         print(f"Ocorreu um erro ao ler o arquivo de clientes: {e}")
     return pd.DataFrame()
-
 
 def identify_persona(customer):
     age = customer['Idade']
@@ -80,6 +81,8 @@ def greetings_persona(customer):
     - Para um cliente jovem (como Nicolas), use uma comunicação casual, amigável e dinâmica.
 
     Não inclua informações da persona na saudação, apenas o tom correto e a saudação amigável.
+
+    Utilize sempre o nome do Cliente, não o da Persona.
 
     """
     return call_openai_api(prompt)
@@ -153,6 +156,56 @@ def notification_offer(customer):
     return call_openai_api(prompt)
 
 
+def generate_payment_prompt(customer):
+    """
+    Gera o prompt com base nos dados do cliente para análise de status de pagamento.
+    """
+    prompt = f"""
+    Você é um assistente virtual que ajuda a analisar a situação de pagamento dos clientes e envia lembretes proativos para evitar interrupções no serviço.
+
+    Abaixo estão as informações do cliente:
+
+    - Nome: {customer['Nome']}
+    - Método de Pagamento: {customer['PaymentMethod']}
+    - Data de Expiração do Cartão: {customer['CardExpiryDate']}
+    - Última Data de Pagamento: {customer['LastPaymentDate']}
+    - Status da Assinatura: {customer['SubscriptionStatus']}
+    - Suspeita de Fraude: {customer['FraudSuspected']}
+
+    A tarefa é identificar possíveis problemas com o pagamento do cliente, como:
+    - Cartão expirado
+    - Assinatura não renovada ou suspensa
+    - Falta de pagamento recente
+    - Suspeita de fraude
+
+    Se houver algum problema, envie uma notificação clara e amigável ao cliente para corrigir a situação. Se tudo estiver em ordem, informe ao cliente que sua conta está em dia.
+
+    Responda com uma mensagem clara e proativa.
+    """
+
+    return prompt
+
+
+def analyze_payment_with_gpt(customer):
+    """
+    Usa a IA Generativa para analisar o status de pagamento e gerar uma resposta.
+    """
+    prompt = generate_payment_prompt(customer)
+
+    response = call_openai_api(prompt)
+
+    return response
+
+
+def notify_customer_payment_status_with_gpt(customer):
+    """
+    Usa a IA para gerar a notificação do status de pagamento e enviá-la ao cliente.
+    """
+    payment_notification = analyze_payment_with_gpt(customer)
+
+    return payment_notification
+
+
 def call_openai_api(prompt):
     headers = {
         "Authorization": f"Bearer {API_KEY}",
@@ -170,75 +223,102 @@ def call_openai_api(prompt):
     except requests.RequestException as e:
         print(f"Erro ao acessar a API: {e}")
         return "Desculpe, não consegui gerar uma resposta no momento."
+    
+
+@api.route('/persona', methods=['POST'])
+def persona():
+    customer_data = request.json
+    try:
+        persona = identify_persona(customer_data)
+        return jsonify({"persona": persona}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@api.route('/greeting', methods=['POST'])
+def greeting():
+    customer_data = request.json
+    try:
+        greeting_msg = greetings_persona(customer_data)
+        return jsonify({"greeting": greeting_msg}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@api.route('/offer', methods=['POST'])
+def offer():
+    customer_data = request.json
+    try:
+        offer_msg = notification_offer(customer_data)
+        return jsonify({"offer": offer_msg}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@api.route('/payment-status', methods=['POST'])
+def payment_status():
+    customer_data = request.json
+    try:
+        payment_msg = notify_customer_payment_status_with_gpt(customer_data)
+        return jsonify({"payment_notification": payment_msg}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    
+
+@api.route('/chat', methods=['POST'])
+def chat():
+    data = request.json
+    user_input = data.get("user_input")
+    customer_data = data.get("customer_data")
+
+    if not user_input or not customer_data:
+        return jsonify({"error": "user_input e customer_data são necessários."}), 400
+
+    if 'chat_history' not in session:
+        session['chat_history'] = []
+
+    try:
+        if len(session['chat_history']) == 0:
+            greeting = greetings_persona(customer_data)
+            session['chat_history'].append({"role": "assistant", "content": greeting})
+
+        session['chat_history'].append({"role": "user", "content": user_input})
+
+        assistant_response = call_openai_api_with_history(session['chat_history'])
+
+        session['chat_history'].append({"role": "assistant", "content": assistant_response})
+
+        return jsonify({"response": assistant_response}), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
-def chat_with_model(model, persona, greeting, faq_dict, recommendation):
-    conversation_history = [
-        {"role": "system", "content": persona},
-        {"role": "assistant", "content": greeting},
-        {"role": "assistant", "content": f"Aqui está uma oferta recomendada para você: {recommendation}"}
-    ]
+def call_openai_api_with_history(messages):
+    headers = {
+        "Authorization": f"Bearer {API_KEY}",
+        "Content-Type": "application/json"
+    }
+    data = {
+        "model": DEFAULT_MODEL,
+        "messages": messages
+    }
 
-    print(f"\nAssistente: {greeting}")
+    try:
+        response = requests.post(f"{BASE_URL}/chat/completions", headers=headers, json=data)
+        response.raise_for_status()
+        return response.json()['choices'][0]['message']['content'].strip()
+    except requests.RequestException as e:
+        print(f"Erro ao acessar a API: {e}")
+        return "Desculpe, não consegui gerar uma resposta no momento."
 
-    while True:
-        user_input = input("\nVocê: ")
-        if user_input.lower() == 'sair':
-            print("Obrigado por conversar comigo. Até a próxima!")
-            break
+def create_app():
+    app = Flask(__name__)
+    
+    CORS(app)
+    app.secret_key = API_KEY
+    app.config['PERMANENT_SESSION_LIFETIME'] = SESSION_LIFETIME
+    app.register_blueprint(api, url_prefix="/api")
 
-        conversation_history.append({"role": "user", "content": user_input})
-        user_input_lower = user_input.strip().lower()
+    return app
 
-        if user_input_lower in faq_dict:
-            response_text = faq_dict[user_input_lower]
-            print(f"\nCliente: {user_input}")
-            print(f"\nAssistente: {response_text}")
-            conversation_history.append({"role": "assistant", "content": response_text})
-            continue
+app = create_app()
+app.run(debug=True)
 
-        try:
-            headers = {
-                "Authorization": f"Bearer {API_KEY}",
-                "Content-Type": "application/json"
-            }
-            data = {
-                "model": model,
-                "messages": conversation_history
-            }
-            response = requests.post(f"{BASE_URL}/chat/completions", headers=headers, json=data)
-            response.raise_for_status()
-            assistant_response = response.json()['choices'][0]['message']['content']
-
-            print(f"\nCliente: {user_input}")
-            print(f"\nAssistente: {assistant_response}")
-            
-            conversation_history.append({"role": "assistant", "content": assistant_response})
-        except requests.RequestException as e:
-            print(f"Ocorreu um erro: {e}")
-
-def main():
-    faq_file_path = r'C:\Users\rlope\OneDrive\Área de Trabalho\HACKATHON\faq.csv'
-    faq_dict = load_faq(faq_file_path)
-
-    customer_file_path = r'C:\Users\rlope\OneDrive\Área de Trabalho\HACKATHON\customer_data.csv'
-    customer_data = load_customer_data(customer_file_path)
-
-    if not customer_data.empty:
-        customer = customer_data.iloc[0]
-        
-        persona = identify_persona(customer)
-        greeting = greetings_persona(customer)
-
-        recommendation = suggest_offer(customer)
-    else:
-        persona = "Você é Be'mo, uma senhora de 70 anos. Use uma linguagem formal e clara para se comunicar."
-        greeting = "Olá, eu sou Be'Mo, o Assistente Virtual da Bemobi. Como posso te ajudar hoje?"
-        recommendation = "Desculpe, não consegui gerar uma oferta no momento."
-
-    chosen_model = DEFAULT_MODEL
-
-    chat_with_model(chosen_model, persona, greeting, faq_dict, recommendation)
-
-if __name__ == "__main__":
-    main()
