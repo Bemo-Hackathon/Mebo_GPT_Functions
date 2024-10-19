@@ -1,7 +1,7 @@
 # %%
 import requests
 
-url = "https://deploy-api-hacka.onrender.com/api/payment-status"
+url = "URL"
 data_payment_status = {
     "customerID": "12345",
     "Nome": "Maria Silva",
@@ -18,7 +18,7 @@ print(response.json())
 # %%
 import requests
 
-url = "https://deploy-api-hacka.onrender.com/api/offer"
+url = "URL"
 data_offer = {
     "customerID": "12345",
     "Nome": "Maria Silva",
@@ -47,7 +47,7 @@ print(response.json())
 # %%
 import requests
 
-url = "https://deploy-api-hacka.onrender.com/api/persona"
+url = "URL"
 
 customer_data = {
     "Nome": "Maria",
@@ -67,7 +67,7 @@ else:
 # %%
 import requests
 
-url = 'https://deploy-api-hacka.onrender.com/api/chat'
+url = 'URL'
 headers = {"Content-Type": "application/json"}
 
 customer_data = {
