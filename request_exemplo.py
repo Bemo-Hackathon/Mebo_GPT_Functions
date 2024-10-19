@@ -1,5 +1,7 @@
 # %%
-url = "http://localhost:5000/api/payment-status"
+import requests
+
+url = "https://deploy-api-hacka.onrender.com/api/payment-status"
 data_payment_status = {
     "customerID": "12345",
     "Nome": "Maria Silva",
@@ -16,7 +18,7 @@ print(response.json())
 # %%
 import requests
 
-url = "http://localhost:5000/api/offer"
+url = "https://deploy-api-hacka.onrender.com/api/offer"
 data_offer = {
     "customerID": "12345",
     "Nome": "Maria Silva",
@@ -45,7 +47,7 @@ print(response.json())
 # %%
 import requests
 
-url = "http://localhost:5000/api/persona"
+url = "https://deploy-api-hacka.onrender.com/api/persona"
 
 customer_data = {
     "Nome": "Maria",
@@ -65,27 +67,36 @@ else:
 # %%
 import requests
 
-url = 'http://localhost:5000/api/chat'
+url = 'https://deploy-api-hacka.onrender.com/api/chat'
+headers = {"Content-Type": "application/json"}
 
-data = {
-    "user_input": "Como posso efetuar um pagamento?",
-    "customer_data": {
-        "Nome": "Maria",
-        "Idade": 70,
-        "SeniorCitizen": 1,
-        "gender": "Feminino"
-    }
+customer_data = {
+    "Nome": "João",
+    "Idade": 65,
+    "SeniorCitizen": 1,
+    "gender": "Male"
 }
 
-try:
-    response = requests.post(url, json=data)
+data = {
+    "user_input": "Olá",
+    "customer_data": customer_data
+}
 
-    if response.status_code == 200:
-        response_data = response.json()
-        print("Resposta do assistente:", response_data['response'])
-    else:
-        print(f"Erro ao chamar a API: {response.status_code}, {response.text}")
-except requests.RequestException as e:
-    print(f"Ocorreu um erro durante a requisição: {e}")
+response = requests.post(url, json=data, headers=headers)
+print(response.json())
 
-# %%
+second_input = {
+    "user_input": "Quais são minhas opções de serviço?",
+    "customer_data": customer_data
+}
+
+response = requests.post(url, json=second_input, headers=headers)
+print(response.json())
+
+third_input = {
+    "user_input": "Quero saber mais sobre a opção 2. Consultoria Especializada",
+    "customer_data": customer_data
+}
+
+response = requests.post(url, json=third_input, headers=headers)
+print(response.json())
